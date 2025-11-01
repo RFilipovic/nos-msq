@@ -154,11 +154,10 @@ void *message_receiver_thread(void *arg) {
             printf("Nepoznat broj poruke %ld\n", msg.mtype);
         }
 
-        // Small delay after processing each message
         nanosleep(&sleep_time, NULL);
     }
     
-    free(targs); // Clean up thread args
+    free(targs);
     return NULL;
 }
 
@@ -256,7 +255,7 @@ int main() {
                    RESOURCE_NAMES[shared_table->resource[1]]);
             shared_table->occupied = 0;
             printf("Pusac 1 mota i pali cigaretu\n");
-            sleep(2); // Simulate smoking
+            sleep(2);
             printf("Pusac 1 je popusio cigaretu\n\n");
           }
         }
@@ -608,7 +607,6 @@ int main() {
 
         printf("\nTrgovac (pid=%d) ulazi u kriticni odsjecak\n", getpid());
 
-        // Generate two different random resources
         int res1 = rand() % 3;
         int res2;
         do {
