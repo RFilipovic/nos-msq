@@ -79,26 +79,22 @@ void *message_receiver_thread(void *arg) {
         Message msg;
         struct timespec sleep_time;
         sleep_time.tv_sec = 0;
-        sleep_time.tv_nsec = 100000000; // 100ms wait
+        sleep_time.tv_nsec = 100000000;
 
-        // Try to receive message without blocking
         if (msgrcv(msqid, &msg, sizeof(msg) - sizeof(long), 0, IPC_NOWAIT) == -1) {
             if (errno == ENOMSG) {
-                // No message available, wait a bit then continue
                 nanosleep(&sleep_time, NULL);
                 continue;
             }
-            if (errno != EINTR) { // Ignore interrupts
+            if (errno != EINTR) {
                 perror("msgrcv");
             }
             nanosleep(&sleep_time, NULL);
             continue;
         }
 
-        // Update logical clock
         Ci = MAX(Ci, msg.Tm) + 1;
 
-        // Handle different message types
         if (msg.mtype == ZAHTJEV) {
             enqueue(pq, &msg);
             printf("Pid=%d primio zahtjev(pi=%d, Tm=%ld)\n", 
@@ -135,8 +131,8 @@ void *message_receiver_thread(void *arg) {
                             perror("msgsnd ODGOVOR");
                         }
                     } else {
-                        printf("Pid=%d poslao odgovor pi=%d\n", 
-                               getpid(), msg.process_num);
+                        printf("Ja sam pid=%d i poslao sam odgovor(pi=%d, Tm=%ld).\n", 
+                   getpid(), reply.process_num, reply.Tm);
                     }
                 } else {
                     deferred[msg.process_num] = 1;
