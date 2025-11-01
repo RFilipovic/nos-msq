@@ -110,7 +110,7 @@ void *message_receiver_thread(void *arg) {
                     Message reply;
                     reply.mtype = ODGOVOR;
                     reply.Tm = Ci;
-                    reply.process_num = top.process_num;
+                    reply.process_num = msg.process_num;
                     
                     int target_msqid;
                     switch (msg.process_num) {
@@ -146,7 +146,7 @@ void *message_receiver_thread(void *arg) {
         } else if (msg.mtype == ODGOVOR) {
             printf("Ja sam pid=%d i primio sam odgovor(pi=%d, Tm=%ld).\n", 
                    getpid(), msg.process_num, msg.Tm);
-            rcvd_counter++;
+                rcvd_counter++;
             
         } else if (msg.mtype == IZLAZ) {
             printf("Ja sam pid=%d i primio sam izlaz(pi=%d, Tm=%ld).\n", 
@@ -206,7 +206,9 @@ int main() {
     targs->process_num = PRVI;
     pthread_create(&thread, NULL, message_receiver_thread, targs);
 
+    usleep(100000);
     while (1) {
+      usleep(100000);
 
       // ako zahtjev nije u redu, posalji ga svima
       if (findByProcessNum(&pq, PRVI) == -1) {
@@ -322,7 +324,9 @@ int main() {
     targs->process_num = DRUGI;
     pthread_create(&thread, NULL, message_receiver_thread, targs);
 
+    usleep(100000);
     while (1) {
+      usleep(100000);
 
       // ako zahtjev nije u redu, posalji ga svima
       if (findByProcessNum(&pq, DRUGI) == -1) {
@@ -438,7 +442,9 @@ int main() {
     targs->process_num = TRECI;
     pthread_create(&thread, NULL, message_receiver_thread, targs);
 
+    usleep(100000);
     while (1) {
+      usleep(100000);
 
       // ako zahtjev nije u redu, posalji ga svima
       if (findByProcessNum(&pq, TRECI) == -1) {
@@ -551,7 +557,9 @@ int main() {
   targs->process_num = TRGOVAC;
   pthread_create(&thread, NULL, message_receiver_thread, targs);
 
+  usleep(100000);
   while (1) {
+    usleep(100000);
 
     // ako zahtjev nije u redu, posalji ga svima
     if (findByProcessNum(&pq, TRGOVAC) == -1) {
