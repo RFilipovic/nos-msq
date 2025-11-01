@@ -1,6 +1,5 @@
 #include <signal.h>
 #include <stdio.h>
-#include <string.h>
 #include <sys/shm.h>
 #include <sys/msg.h>
 #include <time.h>
@@ -11,6 +10,15 @@
 #include "priority_queue.h"
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define ZAHTJEV 1
+#define ODGOVOR 2
+#define IZLAZ 3
+
+#define PRVI 1
+#define DRUGI 2
+#define TRECI 3
+#define TRGOVAC 4
+
 
 typedef struct {
     int resource[2];
@@ -20,6 +28,7 @@ typedef struct {
 typedef struct {
     PriorityQueue *pq;
     int msqid;
+    int process_num;
 } ThreadArgs;
 
 //typedef struct my_msgbuf {
@@ -41,6 +50,18 @@ void retreat(int failure)
         perror("msgctl");
         exit(1);
     }
+    if (msgctl(msqid2, IPC_RMID, NULL) == -1) {
+        perror("msgctl");
+        exit(1);
+    }
+    if (msgctl(msqid3, IPC_RMID, NULL) == -1) {
+        perror("msgctl");
+        exit(1);
+    }
+    if (msgctl(msqid4, IPC_RMID, NULL) == -1) {
+        perror("msgctl");
+        exit(1);
+    }
     exit(0);
 }
 
@@ -49,6 +70,7 @@ void *message_receiver_thread(void* arg) {
     ThreadArgs *targs = (ThreadArgs *)arg;
     PriorityQueue *pq = targs->pq;
     int msqid = targs->msqid;
+    int proc_num = targs->process_num;
     
     while (1) {
         Message msg;
@@ -58,15 +80,21 @@ void *message_receiver_thread(void* arg) {
             continue;
         }
         
-        if (msg.mtype == 0) {
+        if (msg.mtype == ZAHTJEV) {
             enqueue(pq, &msg);
             printf("Ja sam pid=%d i primio sam zahtjev(pi=%d, Tm=%ld).\n", getpid(), msg.process_num, msg.Tm);
+
+            Message m;
+            peek(pq, &m);
+            if(m.process_num != proc_num){
+                
+            }
         }
-        else if (msg.mtype == 1) {
+        else if (msg.mtype == ODGOVOR) {
             printf("Ja sam pid=%d i primio sam odgovor(pi=%d, Tm=%ld).\n", getpid(), msg.process_num, msg.Tm);
             rcvd_counter++;
         }
-        else if (msg.mtype == 2) {
+        else if (msg.mtype == IZLAZ) {
             printf("Ja sam pid=%d i primio sam izlaz(pi=%d, Tm=%ld).\n", getpid(), msg.process_num, msg.Tm);
             Message removed;
             dequeue(pq, &removed);
@@ -108,20 +136,98 @@ int main(){
         ThreadArgs *targs = malloc(sizeof(ThreadArgs));
         targs->pq = &pq;
         targs->msqid = msqid1;
-        pthread_create(&thread, NULL, message_receiver_thread, targs);
+        targs->process_num = PRVI;
         Table *shared_table = (Table *) shmat(shmid, NULL, 0);
+        pthread_create(&thread, NULL, message_receiver_thread, targs);
 
         while (1) {
 
             //ako zahtjev nije u redu, posalji ga svima
+            if(findByProcessNum(&pq, PRVI) == -1) {
+
+                Message m;
+                m.mtype = ZAHTJEV;
+                m.Tm = Ci;
+                m.process_num = PRVI;
+
+                enqueue(&pq, &m);
+
+                if (msgsnd(msqid2, &m, sizeof(m) - sizeof(long), IPC_NOWAIT) == -1)
+                    printf("Izlaz nije poslan.");
+                else
+                    printf("Ja sam pid=%d i poslao sam zahtjev(pi=%d, Tm=%ld).\n", getpid(), m.process_num, m.Tm);
+
+                if (msgsnd(msqid3, &m, sizeof(m) - sizeof(long), IPC_NOWAIT) == -1)
+                    printf("Izlaz nije poslan.");
+                else
+                    printf("Ja sam pid=%d i poslao sam zahtjev(pi=%d, Tm=%ld).\n", getpid(), m.process_num, m.Tm);
+
+                if (msgsnd(msqid4, &m, sizeof(m) - sizeof(long), IPC_NOWAIT) == -1)
+                    printf("Izlaz nije poslan.");
+                else
+                    printf("Ja sam pid=%d i poslao sam zahtjev(pi=%d, Tm=%ld).\n", getpid(), m.process_num, m.Tm);
+
+                continue;
+            }
+
+            Message message;
+            peek(&pq, &message);
+            //provjeri ako je proces 1 dobio 3 odgovora i ako je prvi u prioritetnom redu
+            if(rcvd_counter == 3 && message.process_num == PRVI) {
+                rcvd_counter = 0;
+                dequeue(&pq, &message);
+                //provjeri ako su na stolu duhan i papir i ako jesu udi u K.O. i posalji izlaz, inace samo posalji izlaz
+                if(shared_table->occupied == 1 &&
+                    (shared_table->resource[0] == 0 && shared_table->resource[1] == 1 ||
+                    shared_table->resource[0] == 1 && shared_table->resource[1] == 0)) {
+                    printf("Ja sam pid=%d i ulazim u kriticni odsjecak (duhan i papir).\n", getpid());
+                    //isprazni stol
+                    shared_table->occupied = 0;
+                }
+
+                //promjeni poruku iz zahtjeva u izlaz
+                message.mtype = IZLAZ;
+
+                if (msgsnd(msqid2, &message, sizeof(message) - sizeof(long), IPC_NOWAIT) == -1)
+                    printf("Izlaz nije poslan.");
+                else
+                    printf("Ja sam pid=%d i poslao sam izlaz(pi=%d, Tm=%ld).\n", getpid(), message.process_num, message.Tm);
+
+                if (msgsnd(msqid3, &message, sizeof(message) - sizeof(long), IPC_NOWAIT) == -1)
+                    printf("Izlaz nije poslan.");
+                else
+                    printf("Ja sam pid=%d i poslao sam izlaz(pi=%d, Tm=%ld).\n", getpid(), message.process_num, message.Tm);
+
+                if (msgsnd(msqid4, &message, sizeof(message) - sizeof(long), IPC_NOWAIT) == -1)
+                    printf("Izlaz nije poslan.");
+                else
+                    printf("Ja sam pid=%d i poslao sam izlaz(pi=%d, Tm=%ld).\n", getpid(), message.process_num, message.Tm);
+            }
+        }
+    }
+
+    pid = fork();
+
+    if(pid == 0){ //msqid2
+/*
+        Ci = rand() % 10;
+        ThreadArgs *targs = malloc(sizeof(ThreadArgs));
+        targs->pq = &pq;
+        targs->msqid = msqid2;
+        Table *shared_table = (Table *) shmat(shmid, NULL, 0);
+        pthread_create(&thread, NULL, message_receiver_thread, targs);
+
+        while (1) {
+            
+            //ako zahtjev nije u redu, posalji ga svima
             if(findByProcessNum(&pq, 1) == -1) {
 
                 Message m;
-                m.mtype = 0;
+                m.mtype = ZAHTJEV;
                 m.Tm = Ci;
-                m.process_num = 1;
+                m.process_num = 2;
 
-                if (msgsnd(msqid2, &m, sizeof(m) - sizeof(long), IPC_NOWAIT) == -1)
+                if (msgsnd(msqid1, &m, sizeof(m) - sizeof(long), IPC_NOWAIT) == -1)
                     printf("Izlaz nije poslan.");
                 if (msgsnd(msqid3, &m, sizeof(m) - sizeof(long), IPC_NOWAIT) == -1)
                     printf("Izlaz nije poslan.");
@@ -145,7 +251,7 @@ int main(){
                 }
 
                 //promjeni poruku iz zahtjeva u izlaz
-                message.mtype = 2;
+                message.mtype = IZLAZ;
 
                 if (msgsnd(msqid2, &message, sizeof(message) - sizeof(long), IPC_NOWAIT) == -1)
                     printf("Izlaz nije poslan.");
@@ -155,16 +261,7 @@ int main(){
                     printf("Izlaz nije poslan.");
             }
         }
-    }
-
-    pid = fork();
-
-    if(pid == 0){
-        Ci = rand() % 10;
-        pthread_create(&thread, NULL, message_receiver_thread, &pq);
-        while (1) {
-            //do child stuff forever
-        }
+            */
     }
 
     pid = fork();
