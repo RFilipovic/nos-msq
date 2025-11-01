@@ -63,6 +63,9 @@ void retreat(int failure)
         perror("msgctl");
         exit(1);
     }
+    shmdt(shared_table);
+    shmctl(shmid, IPC_RMID, NULL);
+
     exit(0);
 }
 
@@ -121,6 +124,8 @@ void *message_receiver_thread(void* arg) {
         else {
             printf("Nepoznat broj poruke %ld\n", msg.mtype);
         }
+
+        sleep(1);
     }
     return NULL;
 }
@@ -243,43 +248,56 @@ int main(){
     pid = fork();
 
     if(pid == 0){ //msqid2
-/*
+
         Ci = rand() % 10;
         ThreadArgs *targs = malloc(sizeof(ThreadArgs));
         targs->pq = &pq;
         targs->msqid = msqid2;
+        targs->process_num = DRUGI;
         Table *shared_table = (Table *) shmat(shmid, NULL, 0);
         pthread_create(&thread, NULL, message_receiver_thread, targs);
 
         while (1) {
             
             //ako zahtjev nije u redu, posalji ga svima
-            if(findByProcessNum(&pq, 1) == -1) {
+            if(findByProcessNum(&pq, DRUGI) == -1) {
 
                 Message m;
                 m.mtype = ZAHTJEV;
                 m.Tm = Ci;
-                m.process_num = 2;
+                m.process_num = DRUGI;
+
+                enqueue(&pq, &m);
 
                 if (msgsnd(msqid1, &m, sizeof(m) - sizeof(long), IPC_NOWAIT) == -1)
                     printf("Izlaz nije poslan.");
+                else
+                    printf("Ja sam pid=%d i poslao sam zahtjev(pi=%d, Tm=%ld).\n", getpid(), m.process_num, m.Tm);
+
                 if (msgsnd(msqid3, &m, sizeof(m) - sizeof(long), IPC_NOWAIT) == -1)
                     printf("Izlaz nije poslan.");
+                else
+                    printf("Ja sam pid=%d i poslao sam zahtjev(pi=%d, Tm=%ld).\n", getpid(), m.process_num, m.Tm);
+
                 if (msgsnd(msqid4, &m, sizeof(m) - sizeof(long), IPC_NOWAIT) == -1)
                     printf("Izlaz nije poslan.");
+                else
+                    printf("Ja sam pid=%d i poslao sam zahtjev(pi=%d, Tm=%ld).\n", getpid(), m.process_num, m.Tm);
+
+                continue;
             }
 
             Message message;
             peek(&pq, &message);
-            //provjeri ako je proces 1 dobio 3 odgovora i ako je prvi u prioritetnom redu
-            if(rcvd_counter == 3 && message.process_num == 1) {
+            //provjeri ako je proces 2 dobio 3 odgovora i ako je prvi u prioritetnom redu
+            if(rcvd_counter == 3 && message.process_num == DRUGI) {
                 rcvd_counter = 0;
                 dequeue(&pq, &message);
-                //provjeri ako su na stolu duhan i papir i ako jesu udi u K.O. i posalji izlaz, inace samo posalji izlaz
+                //provjeri ako su na stolu papir i upaljac i ako jesu udi u K.O. i posalji izlaz, inace samo posalji izlaz
                 if(shared_table->occupied == 1 &&
-                    (shared_table->resource[0] == 0 && shared_table->resource[1] == 1 ||
-                    shared_table->resource[0] == 1 && shared_table->resource[1] == 0)) {
-                    printf("Ja sam pid=%d i ulazim u kriticni odsjecak (duhan i papir).\n", getpid());
+                    (shared_table->resource[0] == 2 && shared_table->resource[1] == 1 ||
+                    shared_table->resource[0] == 1 && shared_table->resource[1] == 2)) {
+                    printf("Ja sam pid=%d i ulazim u kriticni odsjecak (upaljac i papir).\n", getpid());
                     //isprazni stol
                     shared_table->occupied = 0;
                 }
@@ -287,52 +305,257 @@ int main(){
                 //promjeni poruku iz zahtjeva u izlaz
                 message.mtype = IZLAZ;
 
-                if (msgsnd(msqid2, &message, sizeof(message) - sizeof(long), IPC_NOWAIT) == -1)
+                if (msgsnd(msqid1, &message, sizeof(message) - sizeof(long), IPC_NOWAIT) == -1)
                     printf("Izlaz nije poslan.");
+                else
+                    printf("Ja sam pid=%d i poslao sam izlaz(pi=%d, Tm=%ld).\n", getpid(), message.process_num, message.Tm);
+
                 if (msgsnd(msqid3, &message, sizeof(message) - sizeof(long), IPC_NOWAIT) == -1)
                     printf("Izlaz nije poslan.");
+                else
+                    printf("Ja sam pid=%d i poslao sam izlaz(pi=%d, Tm=%ld).\n", getpid(), message.process_num, message.Tm);
+
                 if (msgsnd(msqid4, &message, sizeof(message) - sizeof(long), IPC_NOWAIT) == -1)
                     printf("Izlaz nije poslan.");
+                else
+                    printf("Ja sam pid=%d i poslao sam izlaz(pi=%d, Tm=%ld).\n", getpid(), message.process_num, message.Tm);
+
+
+                for (int i = 1; i <= 4; i++) { 
+                    if (deferred[i]) {
+                        Message reply;
+                        reply.mtype = ODGOVOR;
+                        reply.Tm = Ci;
+                        reply.process_num = i; 
+                        if (i == PRVI) msgsnd(msqid1, &reply, sizeof(reply) - sizeof(long), IPC_NOWAIT);
+                        if (i == DRUGI) continue;// msgsnd(msqid2, &reply, sizeof(reply) - sizeof(long), IPC_NOWAIT);
+                        else if (i == TRECI) msgsnd(msqid3, &reply, sizeof(reply) - sizeof(long), IPC_NOWAIT);
+                        else if (i == TRGOVAC) msgsnd(msqid4, &reply, sizeof(reply) - sizeof(long), IPC_NOWAIT);
+
+                        deferred[i] = 0; 
+                        printf("Ja sam pid=%d i poslao sam odgodu(pi=%d).\n", getpid(), i);
+                    }
+                }
             }
         }
-            */
     }
 
     pid = fork();
 
-    if(pid == 0){
+    if(pid == 0){ //msqid3
+
         Ci = rand() % 10;
-        pthread_create(&thread, NULL, message_receiver_thread, &pq);
+        ThreadArgs *targs = malloc(sizeof(ThreadArgs));
+        targs->pq = &pq;
+        targs->msqid = msqid3;
+        targs->process_num = TRECI;
+        Table *shared_table = (Table *) shmat(shmid, NULL, 0);
+        pthread_create(&thread, NULL, message_receiver_thread, targs);
+
         while (1) {
-            //do child stuff forever
+            
+            //ako zahtjev nije u redu, posalji ga svima
+            if(findByProcessNum(&pq, TRECI) == -1) {
+
+                Message m;
+                m.mtype = ZAHTJEV;
+                m.Tm = Ci;
+                m.process_num = TRECI;
+
+                enqueue(&pq, &m);
+
+                if (msgsnd(msqid1, &m, sizeof(m) - sizeof(long), IPC_NOWAIT) == -1)
+                    printf("Izlaz nije poslan.");
+                else
+                    printf("Ja sam pid=%d i poslao sam zahtjev(pi=%d, Tm=%ld).\n", getpid(), m.process_num, m.Tm);
+
+                if (msgsnd(msqid2, &m, sizeof(m) - sizeof(long), IPC_NOWAIT) == -1)
+                    printf("Izlaz nije poslan.");
+                else
+                    printf("Ja sam pid=%d i poslao sam zahtjev(pi=%d, Tm=%ld).\n", getpid(), m.process_num, m.Tm);
+
+                if (msgsnd(msqid4, &m, sizeof(m) - sizeof(long), IPC_NOWAIT) == -1)
+                    printf("Izlaz nije poslan.");
+                else
+                    printf("Ja sam pid=%d i poslao sam zahtjev(pi=%d, Tm=%ld).\n", getpid(), m.process_num, m.Tm);
+
+                continue;
+            }
+
+            Message message;
+            peek(&pq, &message);
+            //provjeri ako je proces 3 dobio 3 odgovora i ako je prvi u prioritetnom redu
+            if(rcvd_counter == 3 && message.process_num == TRECI) {
+                rcvd_counter = 0;
+                dequeue(&pq, &message);
+                //provjeri ako su na stolu duhan i upaljac i ako jesu udi u K.O. i posalji izlaz, inace samo posalji izlaz
+                if(shared_table->occupied == 1 &&
+                    (shared_table->resource[0] == 2 && shared_table->resource[1] == 0 ||
+                    shared_table->resource[0] == 0 && shared_table->resource[1] == 2)) {
+                    printf("Ja sam pid=%d i ulazim u kriticni odsjecak (duhan i upaljac).\n", getpid());
+                    //isprazni stol
+                    shared_table->occupied = 0;
+                }
+
+                //promjeni poruku iz zahtjeva u izlaz
+                message.mtype = IZLAZ;
+
+                if (msgsnd(msqid1, &message, sizeof(message) - sizeof(long), IPC_NOWAIT) == -1)
+                    printf("Izlaz nije poslan.");
+                else
+                    printf("Ja sam pid=%d i poslao sam izlaz(pi=%d, Tm=%ld).\n", getpid(), message.process_num, message.Tm);
+
+                if (msgsnd(msqid2, &message, sizeof(message) - sizeof(long), IPC_NOWAIT) == -1)
+                    printf("Izlaz nije poslan.");
+                else
+                    printf("Ja sam pid=%d i poslao sam izlaz(pi=%d, Tm=%ld).\n", getpid(), message.process_num, message.Tm);
+
+                if (msgsnd(msqid4, &message, sizeof(message) - sizeof(long), IPC_NOWAIT) == -1)
+                    printf("Izlaz nije poslan.");
+                else
+                    printf("Ja sam pid=%d i poslao sam izlaz(pi=%d, Tm=%ld).\n", getpid(), message.process_num, message.Tm);
+
+
+                for (int i = 1; i <= 4; i++) { 
+                    if (deferred[i]) {
+                        Message reply;
+                        reply.mtype = ODGOVOR;
+                        reply.Tm = Ci;
+                        reply.process_num = i; 
+                        if (i == PRVI) msgsnd(msqid1, &reply, sizeof(reply) - sizeof(long), IPC_NOWAIT);
+                        if (i == DRUGI) msgsnd(msqid2, &reply, sizeof(reply) - sizeof(long), IPC_NOWAIT);
+                        else if (i == TRECI) continue; // msgsnd(msqid3, &reply, sizeof(reply) - sizeof(long), IPC_NOWAIT);
+                        else if (i == TRGOVAC) msgsnd(msqid4, &reply, sizeof(reply) - sizeof(long), IPC_NOWAIT);
+
+                        deferred[i] = 0; 
+                        printf("Ja sam pid=%d i poslao sam odgodu(pi=%d).\n", getpid(), i);
+                    }
+                }
+            }
         }
     }
 
     int resource_1, resource_2;
     Ci = rand() % 10;
-    pthread_create(&thread, NULL, message_receiver_thread, &pq);
-    
-    while (1) {
-        resource_1 = rand() % 3;
-        resource_2 = rand() % 3;
+        ThreadArgs *targs = malloc(sizeof(ThreadArgs));
+        targs->pq = &pq;
+        targs->msqid = msqid4;
+        targs->process_num = TRGOVAC;
+        Table *shared_table = (Table *) shmat(shmid, NULL, 0);
+        pthread_create(&thread, NULL, message_receiver_thread, targs);
 
-        //0 - duhan
-        //1 - papir
-        //2 - upaljac
+        while (1) {
 
-        if(resource_1 == resource_2) continue;
+          // ako zahtjev nije u redu, posalji ga svima
+          if (findByProcessNum(&pq, TRGOVAC) == -1) {
 
-        if(resource_1 == 0 && resource_2 == 1){
-            //pusac 1. (duhan i papir)
+            Message m;
+            m.mtype = ZAHTJEV;
+            m.Tm = Ci;
+            m.process_num = TRGOVAC;
 
-        }else if(resource_1 == 1 && resource_2 == 2){
-            //pusac 2. (papir i upaljac)
+            enqueue(&pq, &m);
 
-        }else if(resource_1 == 0 && resource_2 == 2){
-            //pusac 3. (duhan i upaljac)
+            if (msgsnd(msqid1, &m, sizeof(m) - sizeof(long), IPC_NOWAIT) == -1)
+              printf("Izlaz nije poslan.");
+            else
+              printf("Ja sam pid=%d i poslao sam zahtjev(pi=%d, Tm=%ld).\n",
+                     getpid(), m.process_num, m.Tm);
 
-        } 
-    }
+            if (msgsnd(msqid2, &m, sizeof(m) - sizeof(long), IPC_NOWAIT) == -1)
+              printf("Izlaz nije poslan.");
+            else
+              printf("Ja sam pid=%d i poslao sam zahtjev(pi=%d, Tm=%ld).\n",
+                     getpid(), m.process_num, m.Tm);
+
+            if (msgsnd(msqid3, &m, sizeof(m) - sizeof(long), IPC_NOWAIT) == -1)
+              printf("Izlaz nije poslan.");
+            else
+              printf("Ja sam pid=%d i poslao sam zahtjev(pi=%d, Tm=%ld).\n",
+                     getpid(), m.process_num, m.Tm);
+
+            continue;
+          }
+
+          Message message;
+          peek(&pq, &message);
+          // provjeri ako je proces 4 dobio 3 odgovora i ako je prvi u
+          // prioritetnom redu
+          if (rcvd_counter == 3 && message.process_num == TRGOVAC) {
+            rcvd_counter = 0;
+            dequeue(&pq, &message);
+            // provjeri ako su na stolu duhan i upaljac i ako jesu udi u K.O. i
+            // posalji izlaz, inace samo posalji izlaz
+            if (shared_table->occupied == 0) {
+              printf("Ja sam pid=%d i ulazim u kriticni odsjecak (stavi dve razlicite stvari na stol)", getpid());
+              // napuni stol
+              // resource_1 = rand() % 3;
+              // resource_2 = rand() % 3;
+
+              // 0 - duhan
+              // 1 - papir
+              // 2 - upaljac
+
+              int res1 = rand() % 3;
+              int res2;
+              do {
+                  res2 = rand() % 3;
+              } while (res2 == res1);
+
+              shared_table->resource[0] = res1;
+              shared_table->resource[1] = res2;
+              shared_table->occupied = 1;
+            }
+
+            // promjeni poruku iz zahtjeva u izlaz
+            message.mtype = IZLAZ;
+
+            if (msgsnd(msqid1, &message, sizeof(message) - sizeof(long),
+                       IPC_NOWAIT) == -1)
+              printf("Izlaz nije poslan.");
+            else
+              printf("Ja sam pid=%d i poslao sam izlaz(pi=%d, Tm=%ld).\n",
+                     getpid(), message.process_num, message.Tm);
+
+            if (msgsnd(msqid2, &message, sizeof(message) - sizeof(long),
+                       IPC_NOWAIT) == -1)
+              printf("Izlaz nije poslan.");
+            else
+              printf("Ja sam pid=%d i poslao sam izlaz(pi=%d, Tm=%ld).\n",
+                     getpid(), message.process_num, message.Tm);
+
+            if (msgsnd(msqid3, &message, sizeof(message) - sizeof(long),
+                       IPC_NOWAIT) == -1)
+              printf("Izlaz nije poslan.");
+            else
+              printf("Ja sam pid=%d i poslao sam izlaz(pi=%d, Tm=%ld).\n",
+                     getpid(), message.process_num, message.Tm);
+
+            for (int i = 1; i <= 4; i++) {
+              if (deferred[i]) {
+                Message reply;
+                reply.mtype = ODGOVOR;
+                reply.Tm = Ci;
+                reply.process_num = i;
+                if (i == PRVI)
+                  msgsnd(msqid1, &reply, sizeof(reply) - sizeof(long),
+                         IPC_NOWAIT);
+                if (i == DRUGI)
+                  msgsnd(msqid2, &reply, sizeof(reply) - sizeof(long),
+                         IPC_NOWAIT);
+                else if (i == TRECI)
+                  msgsnd(msqid3, &reply, sizeof(reply) - sizeof(long), IPC_NOWAIT);
+                else if (i == TRGOVAC)
+                  continue; //msgsnd(msqid4, &reply, sizeof(reply) - sizeof(long),
+                            //IPC_NOWAIT);
+
+                deferred[i] = 0;
+                printf("Ja sam pid=%d i poslao sam odgodu(pi=%d).\n", getpid(),
+                       i);
+              }
+            }
+          }
+        }
 
     return 0;
 }
