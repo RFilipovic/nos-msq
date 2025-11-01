@@ -81,6 +81,7 @@ void *message_receiver_thread(void* arg) {
         
         if (msgrcv(msqid, &msg, sizeof(msg) - sizeof(long), 0, IPC_NOWAIT) == -1) {
             perror("msgrcv");
+            sleep(1);
             continue;
         }
 
