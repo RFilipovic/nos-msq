@@ -43,7 +43,6 @@ long Ci;
 int rcvd_counter = 0;
 Table *shared_table = NULL;
 int shmid;
-int deferred[5];
 const char *RESOURCE_NAMES[] = {"duhan", "papir", "sibice"};
 
 void retreat(int failure) {
@@ -100,14 +99,11 @@ void *message_receiver_thread(void *arg) {
             printf("Pid=%d primio zahtjev(pi=%d, Tm=%ld)\n", 
                    getpid(), msg.process_num, msg.Tm);
 
-            Message top;
-            if (peek(pq, &top)) {
-                if (top.process_num != proc_num) {
                     Message reply;
                     reply.mtype = ODGOVOR;
                     reply.Tm = Ci;
                     reply.process_num = msg.process_num;
-                    
+
                     int target_msqid;
                     switch (msg.process_num) {
                         case PRVI:
@@ -125,7 +121,6 @@ void *message_receiver_thread(void *arg) {
                         default:
                             continue;
                     }
-                    
                     if (msgsnd(target_msqid, &reply, sizeof(reply) - sizeof(long), IPC_NOWAIT) == -1) {
                         if (errno != EAGAIN) {
                             perror("msgsnd ODGOVOR");
@@ -133,10 +128,6 @@ void *message_receiver_thread(void *arg) {
                     } else {
                         printf("Ja sam pid=%d i poslao sam odgovor(pi=%d, Tm=%ld).\n", 
                    getpid(), reply.process_num, reply.Tm);
-                    }
-                } else {
-                    deferred[msg.process_num] = 1;
-                }
             }
             
         } else if (msg.mtype == ODGOVOR) {
@@ -283,27 +274,6 @@ int main() {
         else
           printf("Ja sam pid=%d i poslao sam izlaz(pi=%d, Tm=%ld).\n", getpid(),
                  message.process_num, message.Tm);
-
-        for (int i = 1; i <= 4; i++) {
-          if (deferred[i]) {
-            Message reply;
-            reply.mtype = ODGOVOR;
-            reply.Tm = Ci;
-            reply.process_num = i;
-            if (i == PRVI)
-              continue; // msgsnd(msqid1, &reply, sizeof(reply) - sizeof(long),
-                        // IPC_NOWAIT);
-            if (i == DRUGI)
-              msgsnd(msqid2, &reply, sizeof(reply) - sizeof(long), IPC_NOWAIT);
-            else if (i == TRECI)
-              msgsnd(msqid3, &reply, sizeof(reply) - sizeof(long), IPC_NOWAIT);
-            else if (i == TRGOVAC)
-              msgsnd(msqid4, &reply, sizeof(reply) - sizeof(long), IPC_NOWAIT);
-
-            deferred[i] = 0;
-            printf("Ja sam pid=%d i poslao sam odgodu(pi=%d).\n", getpid(), i);
-          }
-        }
       }
     }
   }
@@ -401,27 +371,6 @@ int main() {
         else
           printf("Ja sam pid=%d i poslao sam izlaz(pi=%d, Tm=%ld).\n", getpid(),
                  message.process_num, message.Tm);
-
-        for (int i = 1; i <= 4; i++) {
-          if (deferred[i]) {
-            Message reply;
-            reply.mtype = ODGOVOR;
-            reply.Tm = Ci;
-            reply.process_num = i;
-            if (i == PRVI)
-              msgsnd(msqid1, &reply, sizeof(reply) - sizeof(long), IPC_NOWAIT);
-            if (i == DRUGI)
-              continue; // msgsnd(msqid2, &reply, sizeof(reply) - sizeof(long),
-                        // IPC_NOWAIT);
-            else if (i == TRECI)
-              msgsnd(msqid3, &reply, sizeof(reply) - sizeof(long), IPC_NOWAIT);
-            else if (i == TRGOVAC)
-              msgsnd(msqid4, &reply, sizeof(reply) - sizeof(long), IPC_NOWAIT);
-
-            deferred[i] = 0;
-            printf("Ja sam pid=%d i poslao sam odgodu(pi=%d).\n", getpid(), i);
-          }
-        }
       }
     }
   }
@@ -519,27 +468,6 @@ int main() {
         else
           printf("Ja sam pid=%d i poslao sam izlaz(pi=%d, Tm=%ld).\n", getpid(),
                  message.process_num, message.Tm);
-
-        for (int i = 1; i <= 4; i++) {
-          if (deferred[i]) {
-            Message reply;
-            reply.mtype = ODGOVOR;
-            reply.Tm = Ci;
-            reply.process_num = i;
-            if (i == PRVI)
-              msgsnd(msqid1, &reply, sizeof(reply) - sizeof(long), IPC_NOWAIT);
-            if (i == DRUGI)
-              msgsnd(msqid2, &reply, sizeof(reply) - sizeof(long), IPC_NOWAIT);
-            else if (i == TRECI)
-              continue; // msgsnd(msqid3, &reply, sizeof(reply) - sizeof(long),
-                        // IPC_NOWAIT);
-            else if (i == TRGOVAC)
-              msgsnd(msqid4, &reply, sizeof(reply) - sizeof(long), IPC_NOWAIT);
-
-            deferred[i] = 0;
-            printf("Ja sam pid=%d i poslao sam odgodu(pi=%d).\n", getpid(), i);
-          }
-        }
       }
     }
   }
@@ -644,27 +572,6 @@ int main() {
       else
         printf("Ja sam pid=%d i poslao sam izlaz(pi=%d, Tm=%ld).\n", getpid(),
                message.process_num, message.Tm);
-
-      for (int i = 1; i <= 4; i++) {
-        if (deferred[i]) {
-          Message reply;
-          reply.mtype = ODGOVOR;
-          reply.Tm = Ci;
-          reply.process_num = i;
-          if (i == PRVI)
-            msgsnd(msqid1, &reply, sizeof(reply) - sizeof(long), IPC_NOWAIT);
-          if (i == DRUGI)
-            msgsnd(msqid2, &reply, sizeof(reply) - sizeof(long), IPC_NOWAIT);
-          else if (i == TRECI)
-            msgsnd(msqid3, &reply, sizeof(reply) - sizeof(long), IPC_NOWAIT);
-          else if (i == TRGOVAC)
-            continue; // msgsnd(msqid4, &reply, sizeof(reply) - sizeof(long),
-                      // IPC_NOWAIT);
-
-          deferred[i] = 0;
-          printf("Ja sam pid=%d i poslao sam odgodu(pi=%d).\n", getpid(), i);
-        }
-      }
       sleep(3);
     }
   }
