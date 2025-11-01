@@ -131,10 +131,10 @@ int removeAt(PriorityQueue *pq, int index, Message *result) {
     return 1;
 }
 
-int findByProcessNum(PriorityQueue *pq, int process_num, Message *result) {
+int findByProcessNum(PriorityQueue *pq, int process_num /*, Message *result*/) {
     for (int i = 0; i < pq->size; i++) {
         if (pq->messages[i].process_num == process_num) {
-            *result = pq->messages[i];
+            //*result = pq->messages[i];
             return i;
         }
     }

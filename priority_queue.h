@@ -8,8 +8,6 @@
 typedef struct my_msgbuf {
     long mtype;
     char mtext[200];
-    int res_1;
-    int res_2;
     long Tm;
     int process_num;
 } Message;
@@ -28,7 +26,7 @@ int enqueue(PriorityQueue *pq, Message *new_msg);
 int dequeue(PriorityQueue *pq, Message *result);
 int peek(PriorityQueue *pq, Message *result);
 int removeAt(PriorityQueue *pq, int index, Message *result);
-int findByProcessNum(PriorityQueue *pq, int process_num, Message *result);
+int findByProcessNum(PriorityQueue *pq, int process_num/*, Message *result*/);
 void printQueue(PriorityQueue *pq);
 
 #endif

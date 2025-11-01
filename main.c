@@ -17,7 +17,19 @@ typedef struct {
     int occupied;
 } Table;
 
-int msqid;
+typedef struct {
+    PriorityQueue *pq;
+    int msqid;
+} ThreadArgs;
+
+//typedef struct my_msgbuf {
+//    long mtype;
+//    char mtext[200];
+//    long Tm;
+//    int process_num;
+//} Message;
+
+int msqid1, msqid2, msqid3, msqid4;
 long Ci;
 int rcvd_counter = 0;
 Table *shared_table = NULL;
@@ -25,7 +37,7 @@ int shmid;
 
 void retreat(int failure) 
 {
-    if (msgctl(msqid, IPC_RMID, NULL) == -1) {
+    if (msgctl(msqid1, IPC_RMID, NULL) == -1) {
         perror("msgctl");
         exit(1);
     }
@@ -33,33 +45,34 @@ void retreat(int failure)
 }
 
 void *message_receiver_thread(void* arg) {
-    PriorityQueue *pq = (PriorityQueue *)arg;
-    
-    printf("Thread started\n");
+
+    ThreadArgs *targs = (ThreadArgs *)arg;
+    PriorityQueue *pq = targs->pq;
+    int msqid = targs->msqid;
     
     while (1) {
         Message msg;
         
-        if (msgrcv(msqid, &msg, sizeof(msg) - sizeof(long), 1, IPC_NOWAIT) == -1) {
+        if (msgrcv(msqid, &msg, sizeof(msg) - sizeof(long), 0, IPC_NOWAIT) == -1) {
             perror("msgrcv");
             continue;
         }
         
         if (msg.mtype == 0) {
             enqueue(pq, &msg);
-            printf("Received REQUEST from process %d, Tm=%ld\n", msg.process_num, msg.Tm);
+            printf("Ja sam pid=%d i primio sam zahtjev(pi=%d, Tm=%ld).\n", getpid(), msg.process_num, msg.Tm);
         }
         else if (msg.mtype == 1) {
-            printf("Received REPLY from process %d, Tm=%ld\n", msg.process_num, msg.Tm);
+            printf("Ja sam pid=%d i primio sam odgovor(pi=%d, Tm=%ld).\n", getpid(), msg.process_num, msg.Tm);
             rcvd_counter++;
         }
         else if (msg.mtype == 2) {
-            printf("Received RELEASE from process %d, Tm=%ld\n", msg.process_num, msg.Tm);
+            printf("Ja sam pid=%d i primio sam izlaz(pi=%d, Tm=%ld).\n", getpid(), msg.process_num, msg.Tm);
             Message removed;
-            findByProcessNum(pq, msg.process_num, &removed);  // or removeAt if you track index
+            dequeue(pq, &removed);
         }
         else {
-            printf("Received UNKNOWN message type %ld\n", msg.mtype);
+            printf("Nepoznat broj poruke %ld\n", msg.mtype);
         }
 
         Ci = MAX(Ci, msg.Tm) + 1;
@@ -67,7 +80,13 @@ void *message_receiver_thread(void* arg) {
     return NULL;
 }
 
+//================================================================================================================================================================
 int main(){
+
+    msqid1 = msgget(12345, 0666 | IPC_CREAT);
+    msqid2 = msgget(23456, 0666 | IPC_CREAT);
+    msqid3 = msgget(34567, 0666 | IPC_CREAT);
+    msqid4 = msgget(45678, 0666 | IPC_CREAT);
 
     PriorityQueue pq;
     initQueue(&pq);
@@ -83,23 +102,57 @@ int main(){
 
     int pid = fork();
 
-    if(pid == 0){
+    if(pid == 0){ //msqid1
 
         Ci = rand() % 10;
-        msqid = msgget(12345, 0666 | IPC_CREAT);
-        pthread_create(&thread, NULL, message_receiver_thread, &pq);
+        ThreadArgs *targs = malloc(sizeof(ThreadArgs));
+        targs->pq = &pq;
+        targs->msqid = msqid1;
+        pthread_create(&thread, NULL, message_receiver_thread, targs);
         Table *shared_table = (Table *) shmat(shmid, NULL, 0);
 
         while (1) {
+
+            //ako zahtjev nije u redu, posalji ga svima
+            if(findByProcessNum(&pq, 1) == -1) {
+
+                Message m;
+                m.mtype = 0;
+                m.Tm = Ci;
+                m.process_num = 1;
+
+                if (msgsnd(msqid2, &m, sizeof(m) - sizeof(long), IPC_NOWAIT) == -1)
+                    printf("Izlaz nije poslan.");
+                if (msgsnd(msqid3, &m, sizeof(m) - sizeof(long), IPC_NOWAIT) == -1)
+                    printf("Izlaz nije poslan.");
+                if (msgsnd(msqid4, &m, sizeof(m) - sizeof(long), IPC_NOWAIT) == -1)
+                    printf("Izlaz nije poslan.");
+            }
+
             Message message;
             peek(&pq, &message);
             //provjeri ako je proces 1 dobio 3 odgovora i ako je prvi u prioritetnom redu
             if(rcvd_counter == 3 && message.process_num == 1) {
                 rcvd_counter = 0;
-                //dopusti dolazak na stol
-                //posalji poruku redu od trgovca da trazis resurse recimo 0 i 1
-                //ako su potrebne stvari na stolu udi u K.O i uzmi ih
-                //javi drugima da si otisao sa stola
+                dequeue(&pq, &message);
+                //provjeri ako su na stolu duhan i papir i ako jesu udi u K.O. i posalji izlaz, inace samo posalji izlaz
+                if(shared_table->occupied == 1 &&
+                    (shared_table->resource[0] == 0 && shared_table->resource[1] == 1 ||
+                    shared_table->resource[0] == 1 && shared_table->resource[1] == 0)) {
+                    printf("Ja sam pid=%d i ulazim u kriticni odsjecak (duhan i papir).\n", getpid());
+                    //isprazni stol
+                    shared_table->occupied = 0;
+                }
+
+                //promjeni poruku iz zahtjeva u izlaz
+                message.mtype = 2;
+
+                if (msgsnd(msqid2, &message, sizeof(message) - sizeof(long), IPC_NOWAIT) == -1)
+                    printf("Izlaz nije poslan.");
+                if (msgsnd(msqid3, &message, sizeof(message) - sizeof(long), IPC_NOWAIT) == -1)
+                    printf("Izlaz nije poslan.");
+                if (msgsnd(msqid4, &message, sizeof(message) - sizeof(long), IPC_NOWAIT) == -1)
+                    printf("Izlaz nije poslan.");
             }
         }
     }
@@ -108,7 +161,6 @@ int main(){
 
     if(pid == 0){
         Ci = rand() % 10;
-        msqid = msgget(23456, 0666 | IPC_CREAT);
         pthread_create(&thread, NULL, message_receiver_thread, &pq);
         while (1) {
             //do child stuff forever
@@ -119,7 +171,6 @@ int main(){
 
     if(pid == 0){
         Ci = rand() % 10;
-        msqid = msgget(34567, 0666 | IPC_CREAT);
         pthread_create(&thread, NULL, message_receiver_thread, &pq);
         while (1) {
             //do child stuff forever
@@ -128,7 +179,6 @@ int main(){
 
     int resource_1, resource_2;
     Ci = rand() % 10;
-    msqid = msgget(45678, 0666 | IPC_CREAT);
     pthread_create(&thread, NULL, message_receiver_thread, &pq);
     
     while (1) {
